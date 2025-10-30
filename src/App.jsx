@@ -16,6 +16,8 @@ function App() {
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [targetNodes, setTargetNodes] = useState([])
   const [targetConnections, setTargetConnections] = useState([])
+  const [difficulty, setDifficulty] = useState(5)
+  const [showPlayableMesh, setShowPlayableMesh] = useState(true)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -127,99 +129,101 @@ function App() {
       ctx.globalAlpha = 1.0
     }
 
-    connections.forEach(connection => {
-      const sourceNode = nodes.find(n => n.id === connection.sourceId)
-      const targetNode = nodes.find(n => n.id === connection.targetId)
+    if (showPlayableMesh) {
+      connections.forEach(connection => {
+        const sourceNode = nodes.find(n => n.id === connection.sourceId)
+        const targetNode = nodes.find(n => n.id === connection.targetId)
 
-      if (sourceNode && targetNode) {
-        const edgePoints = getEdgePoints(sourceNode, targetNode)
+        if (sourceNode && targetNode) {
+          const edgePoints = getEdgePoints(sourceNode, targetNode)
+          ctx.beginPath()
+          ctx.moveTo(edgePoints.source.x, edgePoints.source.y)
+          ctx.lineTo(edgePoints.target.x, edgePoints.target.y)
+          ctx.strokeStyle = hoveredConnection?.id === connection.id ? '#ff4444' : '#888'
+          ctx.lineWidth = 6
+          ctx.stroke()
+
+          if (sourceNode.type === 'float' || targetNode.type === 'float') {
+            const centerX = (edgePoints.source.x + edgePoints.target.x) / 2
+            const centerY = (edgePoints.source.y + edgePoints.target.y) / 2
+
+            ctx.beginPath()
+            ctx.arc(centerX, centerY, 10, 0, Math.PI * 2)
+            ctx.fillStyle = 'rgba(173, 216, 230, 0.8)'
+            ctx.fill()
+          }
+        }
+      })
+
+      if (hoveredConnection) {
         ctx.beginPath()
-        ctx.moveTo(edgePoints.source.x, edgePoints.source.y)
-        ctx.lineTo(edgePoints.target.x, edgePoints.target.y)
-        ctx.strokeStyle = hoveredConnection?.id === connection.id ? '#ff4444' : '#888'
-        ctx.lineWidth = 6
+        ctx.arc(mousePos.x, mousePos.y, 12, 0, Math.PI * 2)
+        ctx.fillStyle = '#ff4444'
+        ctx.fill()
+        ctx.strokeStyle = '#cc0000'
+        ctx.lineWidth = 2
         ctx.stroke()
 
-        if (sourceNode.type === 'float' || targetNode.type === 'float') {
-          const centerX = (edgePoints.source.x + edgePoints.target.x) / 2
-          const centerY = (edgePoints.source.y + edgePoints.target.y) / 2
+        ctx.strokeStyle = 'white'
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(mousePos.x - 5, mousePos.y - 5)
+        ctx.lineTo(mousePos.x + 5, mousePos.y + 5)
+        ctx.moveTo(mousePos.x + 5, mousePos.y - 5)
+        ctx.lineTo(mousePos.x - 5, mousePos.y + 5)
+        ctx.stroke()
+      }
 
+      if (linkingNode) {
+        const sourceNode = nodes.find(n => n.id === linkingNode)
+        if (sourceNode) {
           ctx.beginPath()
-          ctx.arc(centerX, centerY, 10, 0, Math.PI * 2)
-          ctx.fillStyle = 'rgba(173, 216, 230, 0.8)'
-          ctx.fill()
+          ctx.moveTo(sourceNode.x, sourceNode.y)
+          ctx.lineTo(mousePos.x, mousePos.y)
+          ctx.strokeStyle = '#aaa'
+          ctx.lineWidth = 2
+          ctx.setLineDash([5, 5])
+          ctx.stroke()
+          ctx.setLineDash([])
         }
       }
-    })
 
-    if (hoveredConnection) {
-      ctx.beginPath()
-      ctx.arc(mousePos.x, mousePos.y, 12, 0, Math.PI * 2)
-      ctx.fillStyle = '#ff4444'
-      ctx.fill()
-      ctx.strokeStyle = '#cc0000'
-      ctx.lineWidth = 2
-      ctx.stroke()
-
-      ctx.strokeStyle = 'white'
-      ctx.lineWidth = 2
-      ctx.beginPath()
-      ctx.moveTo(mousePos.x - 5, mousePos.y - 5)
-      ctx.lineTo(mousePos.x + 5, mousePos.y + 5)
-      ctx.moveTo(mousePos.x + 5, mousePos.y - 5)
-      ctx.lineTo(mousePos.x - 5, mousePos.y + 5)
-      ctx.stroke()
-    }
-
-    if (linkingNode) {
-      const sourceNode = nodes.find(n => n.id === linkingNode)
-      if (sourceNode) {
+      if (editingConnection) {
         ctx.beginPath()
-        ctx.moveTo(sourceNode.x, sourceNode.y)
-        ctx.lineTo(mousePos.x, mousePos.y)
-        ctx.strokeStyle = '#aaa'
-        ctx.lineWidth = 2
-        ctx.setLineDash([5, 5])
+        ctx.arc(editingConnection.clickX, editingConnection.clickY, 50, 0, Math.PI * 2)
+        ctx.strokeStyle = 'rgba(255, 140, 0, 0.7)'
+        ctx.lineWidth = 20
         ctx.stroke()
-        ctx.setLineDash([])
+
+        const currentAngle = Math.atan2(mousePos.y - editingConnection.clickY, mousePos.x - editingConnection.clickX)
+        const indicatorX = editingConnection.clickX + Math.cos(currentAngle) * 50
+        const indicatorY = editingConnection.clickY + Math.sin(currentAngle) * 50
+
+        ctx.beginPath()
+        ctx.moveTo(editingConnection.clickX, editingConnection.clickY)
+        ctx.lineTo(indicatorX, indicatorY)
+        ctx.strokeStyle = 'rgba(255, 140, 0, 0.9)'
+        ctx.lineWidth = 3
+        ctx.stroke()
+
+        ctx.font = 'bold 18px system-ui, -apple-system, sans-serif'
+        ctx.fillStyle = 'rgba(255, 140, 0, 1)'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'bottom'
+        ctx.fillText(editingConnection.weight.toFixed(2), editingConnection.clickX, editingConnection.clickY - 65)
       }
+
+      nodes.forEach(node => {
+        ctx.beginPath()
+        ctx.arc(node.x, node.y, 20, 0, Math.PI * 2)
+        ctx.fillStyle = node.type === 'fixed' ? '#4a90e2' : '#e67e22'
+        ctx.fill()
+        ctx.strokeStyle = node.type === 'fixed' ? '#2c5aa0' : '#c0662a'
+        ctx.lineWidth = 2
+        ctx.stroke()
+      })
     }
-
-    if (editingConnection) {
-      ctx.beginPath()
-      ctx.arc(editingConnection.clickX, editingConnection.clickY, 50, 0, Math.PI * 2)
-      ctx.strokeStyle = 'rgba(255, 140, 0, 0.7)'
-      ctx.lineWidth = 20
-      ctx.stroke()
-
-      const currentAngle = Math.atan2(mousePos.y - editingConnection.clickY, mousePos.x - editingConnection.clickX)
-      const indicatorX = editingConnection.clickX + Math.cos(currentAngle) * 50
-      const indicatorY = editingConnection.clickY + Math.sin(currentAngle) * 50
-
-      ctx.beginPath()
-      ctx.moveTo(editingConnection.clickX, editingConnection.clickY)
-      ctx.lineTo(indicatorX, indicatorY)
-      ctx.strokeStyle = 'rgba(255, 140, 0, 0.9)'
-      ctx.lineWidth = 3
-      ctx.stroke()
-
-      ctx.font = 'bold 18px system-ui, -apple-system, sans-serif'
-      ctx.fillStyle = 'rgba(255, 140, 0, 1)'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'bottom'
-      ctx.fillText(editingConnection.weight.toFixed(2), editingConnection.clickX, editingConnection.clickY - 65)
-    }
-
-    nodes.forEach(node => {
-      ctx.beginPath()
-      ctx.arc(node.x, node.y, 20, 0, Math.PI * 2)
-      ctx.fillStyle = node.type === 'fixed' ? '#4a90e2' : '#e67e22'
-      ctx.fill()
-      ctx.strokeStyle = node.type === 'fixed' ? '#2c5aa0' : '#c0662a'
-      ctx.lineWidth = 2
-      ctx.stroke()
-    })
-  }, [nodes, connections, linkingNode, mousePos, editingConnection, editStartAngle, targetNodes, targetConnections, hoveredConnection])
+  }, [nodes, connections, linkingNode, mousePos, editingConnection, editStartAngle, targetNodes, targetConnections, hoveredConnection, showPlayableMesh])
 
   const handleContextMenu = (e) => {
     e.preventDefault()
@@ -578,13 +582,15 @@ function App() {
   const loadGameMode = () => {
     const width = window.innerWidth
     const height = window.innerHeight
-    const numFixed = 4 + Math.floor(Math.random() * 2)
-    const numFloat = 4 + Math.floor(Math.random() * 2)
 
-    const margin = 150
+    const numFixed = Math.floor(3 + ((difficulty - 1) / 9) * 17)
+    const numFloat = Math.floor(3 + ((difficulty - 1) / 9) * 17)
+
+    const margin = 100
     const usableWidth = width - 2 * margin
     const usableHeight = height - 2 * margin
-    const minDistance = Math.min(usableWidth, usableHeight) / Math.sqrt(numFixed + numFloat)
+    const totalNodes = numFixed + numFloat
+    const minDistance = Math.min(usableWidth, usableHeight) / (1.5 + Math.sqrt(totalNodes) * 0.4)
 
     const isValidPosition = (x, y, existingNodes) => {
       for (const node of existingNodes) {
@@ -657,7 +663,9 @@ function App() {
     }
 
     floatNodes.forEach(floatNode => {
-      const numConnections = 2 + Math.floor(Math.random() * 2)
+      const baseConnections = 2
+      const extraConnections = Math.floor(((difficulty - 1) / 9) * 2)
+      const numConnections = baseConnections + Math.floor(Math.random() * (extraConnections + 1))
       const connected = []
 
       while (connected.length < numConnections) {
@@ -670,7 +678,18 @@ function App() {
       }
     })
 
-    const additionalConnections = Math.floor(Math.random() * 5) + 3
+    fixedNodes.forEach(fixedNode => {
+      const hasConnection = generatedConnections.some(conn =>
+        conn.sourceId === fixedNode.id || conn.targetId === fixedNode.id
+      )
+
+      if (!hasConnection) {
+        const randomFloat = floatNodes[Math.floor(Math.random() * floatNodes.length)]
+        addConnection(fixedNode.id, randomFloat.id)
+      }
+    })
+
+    const additionalConnections = Math.floor(((difficulty - 1) / 9) * 10) + 1
     for (let i = 0; i < additionalConnections; i++) {
       const node1 = allNodes[Math.floor(Math.random() * allNodes.length)]
       const node2 = allNodes[Math.floor(Math.random() * allNodes.length)]
@@ -717,21 +736,28 @@ function App() {
     setTargetNodes(targetNodes)
     setTargetConnections(targetConnections)
 
+    const randomizationAmount = ((difficulty - 1) / 9) * 0.8
+
     const randomizedNodes = targetNodes.map(node => {
       if (node.type === 'fixed') {
+        const offsetX = (Math.random() - 0.5) * usableWidth * randomizationAmount
+        const offsetY = (Math.random() - 0.5) * usableHeight * randomizationAmount
         return {
           ...node,
-          x: Math.random() * (width - 200) + 100,
-          y: Math.random() * (height - 200) + 100
+          x: Math.max(margin, Math.min(width - margin, node.x + offsetX)),
+          y: Math.max(margin, Math.min(height - margin, node.y + offsetY))
         }
       }
       return { ...node }
     })
 
-    const randomizedConnections = targetConnections.map(conn => ({
-      ...conn,
-      weight: Math.random() * 3 + 0.5
-    }))
+    const randomizedConnections = targetConnections.map(conn => {
+      const offset = (Math.random() - 0.5) * 3 * randomizationAmount
+      return {
+        ...conn,
+        weight: Math.max(0.1, conn.weight + offset)
+      }
+    })
 
     setNodes(randomizedNodes)
     setConnections(randomizedConnections)
@@ -764,7 +790,19 @@ function App() {
         <button className="toolbar-button" onClick={handleLoad}>Load</button>
         <button className="toolbar-button" onClick={handleClear}>Clear</button>
         <div className="toolbar-separator"></div>
+        <label className="toolbar-label">Difficulty:</label>
+        <input
+          type="number"
+          min="1"
+          max="10"
+          value={difficulty}
+          onChange={(e) => setDifficulty(Math.min(10, Math.max(1, parseInt(e.target.value) || 1)))}
+          className="difficulty-input"
+        />
         <button className="toolbar-button" onClick={loadGameMode}>Game Mode</button>
+        <button className="toolbar-button" onClick={() => setShowPlayableMesh(!showPlayableMesh)}>
+          {showPlayableMesh ? 'Hide Mesh' : 'Show Mesh'}
+        </button>
       </div>
 
       <canvas
