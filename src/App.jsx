@@ -14,6 +14,8 @@ function App() {
   const [editStartAngle, setEditStartAngle] = useState(null)
   const [history, setHistory] = useState([])
   const [historyIndex, setHistoryIndex] = useState(-1)
+  const [targetNodes, setTargetNodes] = useState([])
+  const [targetConnections, setTargetConnections] = useState([])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -83,6 +85,47 @@ function App() {
 
     const ctx = canvas.getContext('2d')
     ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    if (targetNodes.length > 0 && targetConnections.length > 0) {
+      ctx.globalAlpha = 0.3
+
+      targetConnections.forEach(connection => {
+        const sourceNode = targetNodes.find(n => n.id === connection.sourceId)
+        const targetNode = targetNodes.find(n => n.id === connection.targetId)
+
+        if (sourceNode && targetNode && sourceNode.type === 'float' && targetNode.type === 'float') {
+          const edgePoints = getEdgePoints(sourceNode, targetNode)
+          ctx.beginPath()
+          ctx.moveTo(edgePoints.source.x, edgePoints.source.y)
+          ctx.lineTo(edgePoints.target.x, edgePoints.target.y)
+          ctx.strokeStyle = '#888'
+          ctx.lineWidth = 6
+          ctx.stroke()
+
+          const centerX = (edgePoints.source.x + edgePoints.target.x) / 2
+          const centerY = (edgePoints.source.y + edgePoints.target.y) / 2
+
+          ctx.beginPath()
+          ctx.arc(centerX, centerY, 10, 0, Math.PI * 2)
+          ctx.fillStyle = 'rgba(173, 216, 230, 0.8)'
+          ctx.fill()
+        }
+      })
+
+      targetNodes.forEach(node => {
+        if (node.type === 'float') {
+          ctx.beginPath()
+          ctx.arc(node.x, node.y, 20, 0, Math.PI * 2)
+          ctx.fillStyle = '#e67e22'
+          ctx.fill()
+          ctx.strokeStyle = '#c0662a'
+          ctx.lineWidth = 2
+          ctx.stroke()
+        }
+      })
+
+      ctx.globalAlpha = 1.0
+    }
 
     connections.forEach(connection => {
       const sourceNode = nodes.find(n => n.id === connection.sourceId)
@@ -176,7 +219,7 @@ function App() {
       ctx.lineWidth = 2
       ctx.stroke()
     })
-  }, [nodes, connections, linkingNode, mousePos, editingConnection, editStartAngle])
+  }, [nodes, connections, linkingNode, mousePos, editingConnection, editStartAngle, targetNodes, targetConnections, hoveredConnection])
 
   const handleContextMenu = (e) => {
     e.preventDefault()
@@ -522,12 +565,178 @@ function App() {
     saveToHistory()
     setNodes([])
     setConnections([])
+    setTargetNodes([])
+    setTargetConnections([])
     setContextMenu(null)
     setDraggingNode(null)
     setLinkingNode(null)
     setHoveredConnection(null)
     setEditingConnection(null)
     setEditStartAngle(null)
+  }
+
+  const loadGameMode = () => {
+    const width = window.innerWidth
+    const height = window.innerHeight
+    const numFixed = 4 + Math.floor(Math.random() * 2)
+    const numFloat = 4 + Math.floor(Math.random() * 2)
+
+    const margin = 150
+    const usableWidth = width - 2 * margin
+    const usableHeight = height - 2 * margin
+    const minDistance = Math.min(usableWidth, usableHeight) / Math.sqrt(numFixed + numFloat)
+
+    const isValidPosition = (x, y, existingNodes) => {
+      for (const node of existingNodes) {
+        const distance = Math.sqrt(Math.pow(node.x - x, 2) + Math.pow(node.y - y, 2))
+        if (distance < minDistance) {
+          return false
+        }
+      }
+      return true
+    }
+
+    const fixedNodes = []
+    let attempts = 0
+    const maxAttempts = 5000
+
+    while (fixedNodes.length < numFixed && attempts < maxAttempts) {
+      const x = Math.random() * usableWidth + margin
+      const y = Math.random() * usableHeight + margin
+
+      if (isValidPosition(x, y, fixedNodes)) {
+        fixedNodes.push({
+          id: Date.now() + fixedNodes.length + Math.random(),
+          x,
+          y,
+          type: 'fixed'
+        })
+      }
+      attempts++
+    }
+
+    if (fixedNodes.length < numFixed) {
+      console.warn(`Only placed ${fixedNodes.length} of ${numFixed} fixed nodes`)
+    }
+
+    const floatNodes = []
+    for (let i = 0; i < numFloat; i++) {
+      floatNodes.push({
+        id: Date.now() + numFixed + i,
+        x: width / 2,
+        y: height / 2,
+        type: 'float'
+      })
+    }
+
+    const allNodes = [...fixedNodes, ...floatNodes]
+    const generatedConnections = []
+    const connectionSet = new Set()
+
+    const addConnection = (sourceId, targetId) => {
+      const sourceNode = allNodes.find(n => n.id === sourceId)
+      const targetNode = allNodes.find(n => n.id === targetId)
+
+      if (sourceNode.type === 'fixed' && targetNode.type === 'fixed') {
+        return false
+      }
+
+      const key1 = `${sourceId}-${targetId}`
+      const key2 = `${targetId}-${sourceId}`
+      if (!connectionSet.has(key1) && !connectionSet.has(key2) && sourceId !== targetId) {
+        connectionSet.add(key1)
+        generatedConnections.push({
+          id: Date.now() + generatedConnections.length,
+          sourceId,
+          targetId,
+          weight: Math.random() * 2 + 0.5
+        })
+        return true
+      }
+      return false
+    }
+
+    floatNodes.forEach(floatNode => {
+      const numConnections = 2 + Math.floor(Math.random() * 2)
+      const connected = []
+
+      while (connected.length < numConnections) {
+        const randomNode = allNodes[Math.floor(Math.random() * allNodes.length)]
+        if (randomNode.id !== floatNode.id && !connected.includes(randomNode.id)) {
+          if (addConnection(floatNode.id, randomNode.id)) {
+            connected.push(randomNode.id)
+          }
+        }
+      }
+    })
+
+    const additionalConnections = Math.floor(Math.random() * 5) + 3
+    for (let i = 0; i < additionalConnections; i++) {
+      const node1 = allNodes[Math.floor(Math.random() * allNodes.length)]
+      const node2 = allNodes[Math.floor(Math.random() * allNodes.length)]
+      addConnection(node1.id, node2.id)
+    }
+
+    let targetNodes = [...allNodes]
+    const targetConnections = generatedConnections.map(conn => ({ ...conn }))
+
+    for (let iteration = 0; iteration < 50; iteration++) {
+      targetNodes = targetNodes.map(node => {
+        if (node.type === 'float') {
+          const linkedConnections = targetConnections.filter(conn =>
+            conn.sourceId === node.id || conn.targetId === node.id
+          )
+
+          let weightedSumX = 0
+          let weightedSumY = 0
+          let totalWeight = 0
+
+          linkedConnections.forEach(conn => {
+            const linkedNodeId = conn.sourceId === node.id ? conn.targetId : conn.sourceId
+            const linkedNode = targetNodes.find(n => n.id === linkedNodeId)
+
+            if (linkedNode) {
+              weightedSumX += linkedNode.x * conn.weight
+              weightedSumY += linkedNode.y * conn.weight
+              totalWeight += conn.weight
+            }
+          })
+
+          if (totalWeight > 0) {
+            return {
+              ...node,
+              x: weightedSumX / totalWeight,
+              y: weightedSumY / totalWeight
+            }
+          }
+        }
+        return node
+      })
+    }
+
+    setTargetNodes(targetNodes)
+    setTargetConnections(targetConnections)
+
+    const randomizedNodes = targetNodes.map(node => {
+      if (node.type === 'fixed') {
+        return {
+          ...node,
+          x: Math.random() * (width - 200) + 100,
+          y: Math.random() * (height - 200) + 100
+        }
+      }
+      return { ...node }
+    })
+
+    const randomizedConnections = targetConnections.map(conn => ({
+      ...conn,
+      weight: Math.random() * 3 + 0.5
+    }))
+
+    setNodes(randomizedNodes)
+    setConnections(randomizedConnections)
+    setHistory([])
+    setHistoryIndex(-1)
   }
 
   useEffect(() => {
@@ -554,6 +763,8 @@ function App() {
         <button className="toolbar-button" onClick={handleSave}>Save</button>
         <button className="toolbar-button" onClick={handleLoad}>Load</button>
         <button className="toolbar-button" onClick={handleClear}>Clear</button>
+        <div className="toolbar-separator"></div>
+        <button className="toolbar-button" onClick={loadGameMode}>Game Mode</button>
       </div>
 
       <canvas
