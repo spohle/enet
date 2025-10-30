@@ -16,8 +16,12 @@ function App() {
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [targetNodes, setTargetNodes] = useState([])
   const [targetConnections, setTargetConnections] = useState([])
-  const [difficulty, setDifficulty] = useState(5)
+  const [difficulty, setDifficulty] = useState(1)
   const [showPlayableMesh, setShowPlayableMesh] = useState(true)
+  const [matchPercentage, setMatchPercentage] = useState(0)
+  const [showWinPopup, setShowWinPopup] = useState(false)
+  const [hasWon, setHasWon] = useState(false)
+  const [isRandomized, setIsRandomized] = useState(false)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -82,6 +86,53 @@ function App() {
   }, [nodes, connections])
 
   useEffect(() => {
+    if (!isRandomized || targetNodes.length === 0 || nodes.length === 0) {
+      setMatchPercentage(0)
+      return
+    }
+
+    const floatNodesInTarget = targetNodes.filter(n => n.type === 'float')
+    const floatNodesInModifiable = nodes.filter(n => n.type === 'float')
+
+    if (floatNodesInTarget.length === 0) {
+      setMatchPercentage(100)
+      return
+    }
+
+    const matchThreshold = 300
+
+    let totalScore = 0
+
+    floatNodesInTarget.forEach(targetNode => {
+      const correspondingNode = floatNodesInModifiable.find(n => n.id === targetNode.id)
+
+      if (correspondingNode) {
+        const distance = Math.sqrt(
+          Math.pow(targetNode.x - correspondingNode.x, 2) +
+          Math.pow(targetNode.y - correspondingNode.y, 2)
+        )
+
+        const normalizedDistance = Math.min(distance / matchThreshold, 1)
+        const nodeScore = Math.max(0, 1 - normalizedDistance)
+        totalScore += nodeScore
+      }
+    })
+
+    const averageScore = totalScore / floatNodesInTarget.length
+    const percentage = Math.round(averageScore * 100)
+
+    setMatchPercentage(percentage)
+
+    console.log('Match check:', { percentage, hasWon, isRandomized, targetNodesLength: targetNodes.length, shouldShow: percentage >= 98 && !hasWon && targetNodes.length > 0 })
+
+    if (percentage >= 98 && !hasWon && targetNodes.length > 0) {
+      console.log('TRIGGERING WIN POPUP')
+      setShowWinPopup(true)
+      setHasWon(true)
+    }
+  }, [nodes, targetNodes, hasWon, isRandomized])
+
+  useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
 
@@ -103,14 +154,6 @@ function App() {
           ctx.strokeStyle = '#888'
           ctx.lineWidth = 6
           ctx.stroke()
-
-          const centerX = (edgePoints.source.x + edgePoints.target.x) / 2
-          const centerY = (edgePoints.source.y + edgePoints.target.y) / 2
-
-          ctx.beginPath()
-          ctx.arc(centerX, centerY, 10, 0, Math.PI * 2)
-          ctx.fillStyle = 'rgba(173, 216, 230, 0.8)'
-          ctx.fill()
         }
       })
 
@@ -118,9 +161,9 @@ function App() {
         if (node.type === 'float') {
           ctx.beginPath()
           ctx.arc(node.x, node.y, 20, 0, Math.PI * 2)
-          ctx.fillStyle = '#e67e22'
+          ctx.fillStyle = '#2ecc71'
           ctx.fill()
-          ctx.strokeStyle = '#c0662a'
+          ctx.strokeStyle = '#27ae60'
           ctx.lineWidth = 2
           ctx.stroke()
         }
@@ -404,7 +447,7 @@ function App() {
       return
     }
 
-    if (hoveredConnection) {
+    if (hoveredConnection && targetNodes.length === 0) {
       saveToHistory()
       setConnections(connections.filter(conn => conn.id !== hoveredConnection.id))
       setHoveredConnection(null)
@@ -476,9 +519,11 @@ function App() {
           : node
       ))
       setHoveredConnection(null)
-    } else if (!linkingNode) {
+    } else if (!linkingNode && targetNodes.length === 0) {
       const connection = getConnectionAtPosition(mouseX, mouseY)
       setHoveredConnection(connection)
+    } else if (targetNodes.length > 0) {
+      setHoveredConnection(null)
     }
   }
 
@@ -580,17 +625,23 @@ function App() {
   }
 
   const loadGameMode = () => {
+    setShowPlayableMesh(true)
+    setShowWinPopup(false)
+    setHasWon(false)
+    setEditingConnection(null)
+    setEditStartAngle(null)
+
     const width = window.innerWidth
     const height = window.innerHeight
 
-    const numFixed = Math.floor(3 + ((difficulty - 1) / 9) * 17)
-    const numFloat = Math.floor(3 + ((difficulty - 1) / 9) * 17)
+    const numFloat = 3 + difficulty
+    const numFixed = Math.floor(numFloat * 0.8)
 
-    const margin = 100
+    const margin = 150
     const usableWidth = width - 2 * margin
     const usableHeight = height - 2 * margin
     const totalNodes = numFixed + numFloat
-    const minDistance = Math.min(usableWidth, usableHeight) / (1.5 + Math.sqrt(totalNodes) * 0.4)
+    const minDistance = Math.min(usableWidth, usableHeight) / (0.8 + Math.sqrt(totalNodes) * 0.25)
 
     const isValidPosition = (x, y, existingNodes) => {
       for (const node of existingNodes) {
@@ -733,10 +784,51 @@ function App() {
       })
     }
 
-    setTargetNodes(targetNodes)
-    setTargetConnections(targetConnections)
+    for (let separation = 0; separation < 100; separation++) {
+      const nodeRadius = 20
+      const minSeparation = nodeRadius * 2 + 5
+      let moved = false
 
-    const randomizationAmount = ((difficulty - 1) / 9) * 0.8
+      for (let i = 0; i < targetNodes.length; i++) {
+        for (let j = i + 1; j < targetNodes.length; j++) {
+          const node1 = targetNodes[i]
+          const node2 = targetNodes[j]
+
+          const dx = node2.x - node1.x
+          const dy = node2.y - node1.y
+          const distance = Math.sqrt(dx * dx + dy * dy)
+
+          if (distance < minSeparation && distance > 0) {
+            moved = true
+            const overlap = minSeparation - distance
+            const moveDistance = overlap / 2
+
+            const normalX = dx / distance
+            const normalY = dy / distance
+
+            if (node1.type === 'float') {
+              targetNodes[i] = {
+                ...node1,
+                x: node1.x - normalX * moveDistance,
+                y: node1.y - normalY * moveDistance
+              }
+            }
+
+            if (node2.type === 'float') {
+              targetNodes[j] = {
+                ...node2,
+                x: node2.x + normalX * moveDistance,
+                y: node2.y + normalY * moveDistance
+              }
+            }
+          }
+        }
+      }
+
+      if (!moved) break
+    }
+
+    const randomizationAmount = 0.25
 
     const randomizedNodes = targetNodes.map(node => {
       if (node.type === 'fixed') {
@@ -752,17 +844,24 @@ function App() {
     })
 
     const randomizedConnections = targetConnections.map(conn => {
-      const offset = (Math.random() - 0.5) * 3 * randomizationAmount
+      const offset = (Math.random() - 0.5) * 4 * randomizationAmount
       return {
         ...conn,
         weight: Math.max(0.1, conn.weight + offset)
       }
     })
 
+    setIsRandomized(false)
     setNodes(randomizedNodes)
     setConnections(randomizedConnections)
+    setTargetNodes(targetNodes)
+    setTargetConnections(targetConnections)
     setHistory([])
     setHistoryIndex(-1)
+
+    setTimeout(() => {
+      setIsRandomized(true)
+    }, 500)
   }
 
   useEffect(() => {
@@ -779,6 +878,20 @@ function App() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [historyIndex, history])
+
+  const getMatchColor = (percentage) => {
+    const red = Math.round(255 * (1 - percentage / 100))
+    const green = Math.round(255 * (percentage / 100))
+    return `rgb(${red}, ${green}, 0)`
+  }
+
+  const handleNextLevel = () => {
+    setDifficulty(prev => Math.min(10, prev + 1))
+    setShowWinPopup(false)
+    setTimeout(() => {
+      loadGameMode()
+    }, 0)
+  }
 
   return (
     <div className="app-container">
@@ -805,6 +918,23 @@ function App() {
         </button>
       </div>
 
+      {targetNodes.length > 0 && (
+        <div className="match-meter">
+          <div className="match-meter-label">Match Progress</div>
+          <div className="match-meter-bar-container">
+            <div
+              className="match-meter-bar"
+              style={{
+                width: `${matchPercentage}%`,
+                backgroundColor: getMatchColor(matchPercentage)
+              }}
+            >
+              {matchPercentage}%
+            </div>
+          </div>
+        </div>
+      )}
+
       <canvas
         ref={canvasRef}
         className="drawing-canvas"
@@ -825,6 +955,23 @@ function App() {
           </div>
           <div className="menu-item" onClick={() => createNode('float')}>
             Create Float Node
+          </div>
+        </div>
+      )}
+
+      {showWinPopup && (
+        <div className="win-popup-overlay">
+          <div className="win-popup">
+            <h2 className="win-popup-title">🎉 Level Complete!</h2>
+            <p className="win-popup-message">
+              You've successfully matched the target mesh!
+            </p>
+            <div className="win-popup-stats">
+              Match: {matchPercentage}%
+            </div>
+            <button className="win-popup-button" onClick={handleNextLevel}>
+              {difficulty < 10 ? 'Next Level' : 'Play Again'}
+            </button>
           </div>
         </div>
       )}
