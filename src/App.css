@@ -23,28 +23,41 @@ body {
   top: 16px;
   left: 16px;
   display: flex;
+  align-items: center;
   gap: 8px;
   z-index: 1000;
 }
 
+.toolbar-separator {
+  width: 1px;
+  height: 24px;
+  background-color: #ccc;
+  margin: 0 4px;
+}
+
 .toolbar-button {
-  padding: 8px 16px;
+  padding: 6px 12px;
   background-color: white;
   border: 1px solid #ccc;
   border-radius: 4px;
   font-family: system-ui, -apple-system, sans-serif;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   transition: background-color 0.2s;
 }
 
-.toolbar-button:hover {
+.toolbar-button:hover:not(:disabled) {
   background-color: #f0f0f0;
 }
 
-.toolbar-button:active {
+.toolbar-button:active:not(:disabled) {
   background-color: #e0e0e0;
+}
+
+.toolbar-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .drawing-canvas {

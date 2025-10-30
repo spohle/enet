@@ -12,6 +12,8 @@ function App() {
   const [hoveredConnection, setHoveredConnection] = useState(null)
   const [editingConnection, setEditingConnection] = useState(null)
   const [editStartAngle, setEditStartAngle] = useState(null)
+  const [history, setHistory] = useState([])
+  const [historyIndex, setHistoryIndex] = useState(-1)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -200,6 +202,8 @@ function App() {
   const createNode = (type) => {
     if (!contextMenu) return
 
+    saveToHistory()
+
     const newNode = {
       id: Date.now(),
       x: contextMenu.x,
@@ -354,6 +358,7 @@ function App() {
     }
 
     if (hoveredConnection) {
+      saveToHistory()
       setConnections(connections.filter(conn => conn.id !== hoveredConnection.id))
       setHoveredConnection(null)
       return
@@ -366,6 +371,7 @@ function App() {
       setDraggingNode(null)
     } else if (clickedNode && linkingNode) {
       if (linkingNode !== clickedNode.id) {
+        saveToHistory()
         const newConnection = {
           id: Date.now(),
           sourceId: linkingNode,
@@ -430,8 +436,12 @@ function App() {
   }
 
   const handleMouseUp = () => {
+    if (draggingNode) {
+      saveToHistory()
+    }
     setDraggingNode(null)
     if (editingConnection) {
+      saveToHistory()
       setEditingConnection(null)
       setEditStartAngle(null)
     }
@@ -477,7 +487,39 @@ function App() {
     input.click()
   }
 
+  const saveToHistory = () => {
+    const newState = {
+      nodes: JSON.parse(JSON.stringify(nodes)),
+      connections: JSON.parse(JSON.stringify(connections))
+    }
+    const newHistory = history.slice(0, historyIndex + 1)
+    newHistory.push(newState)
+    setHistory(newHistory)
+    setHistoryIndex(newHistory.length - 1)
+  }
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const prevIndex = historyIndex - 1
+      const prevState = history[prevIndex]
+      setNodes(prevState.nodes)
+      setConnections(prevState.connections)
+      setHistoryIndex(prevIndex)
+    }
+  }
+
+  const handleRedo = () => {
+    if (historyIndex < history.length - 1) {
+      const nextIndex = historyIndex + 1
+      const nextState = history[nextIndex]
+      setNodes(nextState.nodes)
+      setConnections(nextState.connections)
+      setHistoryIndex(nextIndex)
+    }
+  }
+
   const handleClear = () => {
+    saveToHistory()
     setNodes([])
     setConnections([])
     setContextMenu(null)
@@ -488,9 +530,27 @@ function App() {
     setEditStartAngle(null)
   }
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        handleUndo()
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault()
+        handleRedo()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [historyIndex, history])
+
   return (
     <div className="app-container">
       <div className="toolbar">
+        <button className="toolbar-button" onClick={handleUndo} disabled={historyIndex <= 0}>Undo</button>
+        <button className="toolbar-button" onClick={handleRedo} disabled={historyIndex >= history.length - 1}>Redo</button>
+        <div className="toolbar-separator"></div>
         <button className="toolbar-button" onClick={handleSave}>Save</button>
         <button className="toolbar-button" onClick={handleLoad}>Load</button>
         <button className="toolbar-button" onClick={handleClear}>Clear</button>
