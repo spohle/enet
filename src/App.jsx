@@ -437,8 +437,65 @@ function App() {
     }
   }
 
+  const handleSave = () => {
+    const data = {
+      nodes,
+      connections
+    }
+    const json = JSON.stringify(data, null, 2)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'graph.json'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleLoad = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    input.onchange = (e) => {
+      const file = e.target.files[0]
+      if (file) {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          try {
+            const data = JSON.parse(event.target.result)
+            if (data.nodes && data.connections) {
+              setNodes(data.nodes)
+              setConnections(data.connections)
+            }
+          } catch (error) {
+            console.error('Error loading file:', error)
+          }
+        }
+        reader.readAsText(file)
+      }
+    }
+    input.click()
+  }
+
+  const handleClear = () => {
+    setNodes([])
+    setConnections([])
+    setContextMenu(null)
+    setDraggingNode(null)
+    setLinkingNode(null)
+    setHoveredConnection(null)
+    setEditingConnection(null)
+    setEditStartAngle(null)
+  }
+
   return (
     <div className="app-container">
+      <div className="toolbar">
+        <button className="toolbar-button" onClick={handleSave}>Save</button>
+        <button className="toolbar-button" onClick={handleLoad}>Load</button>
+        <button className="toolbar-button" onClick={handleClear}>Clear</button>
+      </div>
+
       <canvas
         ref={canvasRef}
         className="drawing-canvas"

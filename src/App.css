@@ -15,10 +15,43 @@ body {
   background-image:
     radial-gradient(circle, #d0d0d0 1px, transparent 1px);
   background-size: 20px 20px;
+  position: relative;
+}
+
+.toolbar {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  gap: 8px;
+  z-index: 1000;
+}
+
+.toolbar-button {
+  padding: 8px 16px;
+  background-color: white;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.2s;
+}
+
+.toolbar-button:hover {
+  background-color: #f0f0f0;
+}
+
+.toolbar-button:active {
+  background-color: #e0e0e0;
 }
 
 .drawing-canvas {
   display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
 }
 
 .context-menu {
